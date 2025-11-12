@@ -54,13 +54,13 @@ class Aggregator(ABC):
         """
         Updates the current set of nodes expected to participate in the upcoming aggregation round.
 
-        This method informs the update handler (`us`) about the new set of federation nodes, 
-        clears any pending models, and attempts to acquire the aggregation lock to prepare 
+        This method informs the update handler (`us`) about the new set of federation nodes,
+        clears any pending models, and attempts to acquire the aggregation lock to prepare
         for model aggregation. If the aggregation process is already running, it releases the lock
         and tries again to ensure proper cleanup between rounds.
 
         Args:
-            federation_nodes (set): A set of addresses representing the nodes expected to contribute 
+            federation_nodes (set): A set of addresses representing the nodes expected to contribute
                                     updates for the next aggregation round.
 
         Raises:
@@ -108,7 +108,7 @@ class Aggregator(ABC):
             TimeoutError: If the aggregation lock is not acquired within the defined timeout.
             asyncio.CancelledError: If the aggregation lock acquisition is cancelled.
             Exception: For any other unexpected errors during the aggregation process.
-        """            
+        """
         try:
             timeout = self.config.participant["aggregator_args"]["aggregation_timeout"]
             logging.info(f"Aggregation timeout: {timeout} starts...")
@@ -145,7 +145,7 @@ class Aggregator(ABC):
         if not updates:
             logging.info(f"🔄  get_aggregation | No updates has been received..resolving conflict to continue...")
             updates = {self._addr: await self.engine.resolve_missing_updates()}
-        
+
         missing_nodes = await self.us.get_round_missing_nodes()
         if missing_nodes:
             logging.info(f"🔄  get_aggregation | Aggregation incomplete, missing models from: {missing_nodes}")
@@ -177,12 +177,32 @@ def create_aggregator(config, engine) -> Aggregator:
     from nebula.core.aggregation.krum import Krum
     from nebula.core.aggregation.median import Median
     from nebula.core.aggregation.trimmedmean import TrimmedMean
+    from nebula.core.aggregation.fedawaDFL import FedAWADFL
+    from nebula.core.aggregation.fedbalance import FedBalance
+    from nebula.core.aggregation.balanceFedProxFODAC import BalanceFedProxFODAC
+    from nebula.core.aggregation.balanceFedProxFODACPlus import BalanceFedProxFODACPlus
+    from nebula.core.aggregation.balanceFedProx import BalanceFedProx
+    from nebula.core.aggregation.balanceFedProxPlus import BalanceFedProxPlus
+    from nebula.core.aggregation.balanceAdp import BalanceAdp
+    from nebula.core.aggregation.balanceAWA import BalanceAWA
+    from nebula.core.aggregation.balance import Balance
+    from nebula.core.aggregation.fedadpDFL import FedAdpDFL
 
     ALGORITHM_MAP = {
         "FedAvg": FedAvg,
         "Krum": Krum,
         "Median": Median,
         "TrimmedMean": TrimmedMean,
+        "FedAWADFL": FedAWADFL,
+        "FedBalance": FedBalance,
+        "BalanceFedProxFODAC": BalanceFedProxFODAC,
+        "BalanceFedProxFODACPlus": BalanceFedProxFODACPlus,
+        "BalanceFedProx": BalanceFedProx,
+        "BalanceFedProxPlus": BalanceFedProxPlus,
+        "BalanceAdp": BalanceAdp,
+        "BalanceAWA": BalanceAWA,
+        "Balance": Balance,
+        "FedAdpDFL": FedAdpDFL,
     }
     algorithm = config.participant["aggregator_args"]["algorithm"]
     aggregator = ALGORITHM_MAP.get(algorithm)
