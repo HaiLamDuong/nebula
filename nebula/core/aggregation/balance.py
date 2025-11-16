@@ -88,21 +88,19 @@ class Balance(Aggregator):
         Args:
             models (dict): Dictionary of model updates, where keys are node addresses
                           and values are tuples of (model_parameters, weight).
-
         Returns:
             dict: Aggregated model parameters.
         """
         super().run_aggregation(models)
 
+        local_model, _ = self.get_local_model(models)
+
         filtered_models = self.remove_malicious_models(models)
         if not filtered_models:
             logging.debug("No models left after filtering")
-            return None
+            return local_model
 
         filtered_models = list(filtered_models.values())
-
-        local_model, _ = self.get_local_model(models)
-
         accum = {layer: torch.zeros_like(param, dtype=torch.float32) for layer, param in local_model.items()}
 
         S = len(filtered_models)
