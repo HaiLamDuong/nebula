@@ -9,10 +9,10 @@ class BalanceFedProx(Aggregator):
     def __init__(self, config=None, **kwargs):
         super().__init__(config, **kwargs)
         # Hyperparameters
-        self.A = 1.5           # balance filtering constant
+        self.A = 2           # balance filtering constant
         self.K = 1.0           # decay factor
-        self.a = 0.5           # weight between local and neighbors
-        self.mu = 0.1         # FedProx regularization strength
+        self.a = 0.4           # weight between local and neighbors
+        self.mu = 0.3         # FedProx regularization strength
         logging.info(f"[{self.__class__.__name__}] Initialized with A={self.A}, K={self.K}, a={self.a}, mu={self.mu}")
 
     def get_local_model(self, models):
@@ -54,7 +54,8 @@ class BalanceFedProx(Aggregator):
         # Compute ||r_i||
         prox_norm = 0.0
         for param in prox_center.values():
-            prox_norm += torch.norm(param, p=2).item() ** 2
+            tensor = param if param.is_floating_point() else param.float()
+            prox_norm += torch.norm(tensor, p=2).item() ** 2
         prox_norm = math.sqrt(prox_norm)
 
         threshold = self.A * math.exp(-self.K * current_round / total_rounds) * prox_norm
@@ -68,6 +69,9 @@ class BalanceFedProx(Aggregator):
             distance = 0.0
             for layer in prox_center:
                 diff = prox_center[layer] - model_params[layer]
+                # Ensure diff is float
+                if not diff.is_floating_point():
+                    diff = diff.float()
                 distance += torch.norm(diff, p=2).item() ** 2
             distance = math.sqrt(distance)
 
@@ -104,7 +108,7 @@ class BalanceFedProx(Aggregator):
         with torch.no_grad():
             for params, _ in filtered_models:
                 for layer in accum:
-                    accum[layer].add_(params[layer], alpha=1.0 / S)
+                    accum[layer].add_(params[layer].to(accum[layer].dtype), alpha=1.0 / S)
 
             # result = a * wi + (1-a)*avg(wj) - mu*(wi - r_i)
             for layer in accum:
