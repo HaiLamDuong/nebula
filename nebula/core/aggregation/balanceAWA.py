@@ -43,7 +43,7 @@ class BalanceAWA(Aggregator):
         self.balance_alpha = 0.4  # Local model weight in final aggregation
 
         # FedAWA parameters
-        self.fedawa_alpha = 1.0    # Regularization weight in loss function
+        self.fedawa_alpha = 0.5    # Regularization weight in loss function
         self.lr = 0.01             # Learning rate for gradient descent
         self.max_steps = 30        # Max iterations for optimization
         self.convergence_threshold = 1e-6
@@ -68,7 +68,8 @@ class BalanceAWA(Aggregator):
         """Compute L2 norm of model parameters."""
         norm = 0.0
         for param in model_params.values():
-            norm += torch.norm(param, p=2).item() ** 2
+            tensor = param if param.is_floating_point() else param.float()
+            norm += torch.norm(tensor, p=2).item() ** 2
         return math.sqrt(norm)
 
 
