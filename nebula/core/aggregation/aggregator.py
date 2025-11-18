@@ -185,6 +185,7 @@ def create_aggregator(config, engine) -> Aggregator:
     from nebula.core.aggregation.balanceFedProxPlus import BalanceFedProxPlus
     from nebula.core.aggregation.balanceAdp import BalanceAdp
     from nebula.core.aggregation.balanceAWA import BalanceAWA
+    from nebula.core.aggregation.balanceAWAPlus import BalanceAWAPlus
     from nebula.core.aggregation.balance import Balance
     from nebula.core.aggregation.fedadpDFL import FedAdpDFL
 
@@ -201,6 +202,7 @@ def create_aggregator(config, engine) -> Aggregator:
         "BalanceFedProxPlus": BalanceFedProxPlus,
         "BalanceAdp": BalanceAdp,
         "BalanceAWA": BalanceAWA,
+        "BalanceAWAPlus": BalanceAWAPlus,
         "Balance": Balance,
         "FedAdpDFL": FedAdpDFL,
     }
