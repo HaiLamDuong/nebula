@@ -34,9 +34,10 @@ class BalanceFedProx(Aggregator):
             r_i = {}
             num_neighbors = len(neighbor_models)
             for layer in neighbor_models[0]:
-                r_i[layer] = torch.zeros_like(neighbor_models[0][layer])
+                r_i[layer] = torch.zeros_like(neighbor_models[0][layer] if neighbor_models[0][layer].is_floating_point() else neighbor_models[0][layer].float())
                 for model in neighbor_models:
-                    r_i[layer] += model[layer] / num_neighbors
+                    tensor = model[layer] if model[layer].is_floating_point() else model[layer].float()
+                    r_i[layer] += tensor / num_neighbors
         return r_i
 
     def remove_malicious_models(self, models, prox_center):
@@ -103,7 +104,7 @@ class BalanceFedProx(Aggregator):
         filtered_models = list(filtered_models.values())
         S = len(filtered_models)
 
-        accum = {layer: torch.zeros_like(param) for layer, param in local_model.items()}
+        accum = {layer: torch.zeros_like(param, dtype=torch.float32) for layer, param in local_model.items()}
 
         with torch.no_grad():
             for params, _ in filtered_models:
