@@ -9,10 +9,10 @@ class BalanceFedProx(Aggregator):
     def __init__(self, config=None, **kwargs):
         super().__init__(config, **kwargs)
         # Hyperparameters
-        self.A = 2           # balance filtering constant
+        self.A = 1.5           # balance filtering constant
         self.K = 1.0           # decay factor
-        self.a = 0.4           # weight between local and neighbors
-        self.mu = 0.3         # FedProx regularization strength
+        self.a = 0.5           # weight between local and neighbors
+        self.mu = 0.1         # FedProx regularization strength
         logging.info(f"[{self.__class__.__name__}] Initialized with A={self.A}, K={self.K}, a={self.a}, mu={self.mu}")
 
     def get_local_model(self, models):
@@ -41,10 +41,6 @@ class BalanceFedProx(Aggregator):
         return r_i
 
     def remove_malicious_models(self, models, prox_center):
-        """
-        Filter models based on prox-aware distance:
-        ||wj - r_i|| <= A * exp(-K * t / T) * ||r_i||
-        """
         try:
             current_round = self.engine.round + 1
             total_rounds = self.engine.total_rounds
@@ -52,38 +48,34 @@ class BalanceFedProx(Aggregator):
             logging.error(f"[{self.__class__.__name__}] Failed to get round info: {e}")
             return models
 
-        # Compute ||r_i||
-        prox_norm = 0.0
-        for param in prox_center.values():
-            tensor = param if param.is_floating_point() else param.float()
-            prox_norm += torch.norm(tensor, p=2).item() ** 2
-        prox_norm = math.sqrt(prox_norm)
+        local_model, _ = self.get_local_model(models)
 
-        threshold = self.A * math.exp(-self.K * current_round / total_rounds) * prox_norm
+        local_norm = math.sqrt(sum(torch.norm(p, p=2).item() ** 2 for p in local_model.values()))
+
+        threshold = self.A * math.exp(-self.K * current_round / total_rounds) * local_norm
 
         filtered_models = {}
+
         for node_addr, (model_params, weight) in models.items():
             if node_addr == self._addr:
                 continue
 
-            # Compute ||wj - r_i||
-            distance = 0.0
-            for layer in prox_center:
-                diff = prox_center[layer] - model_params[layer]
-                # Ensure diff is float
-                if not diff.is_floating_point():
-                    diff = diff.float()
-                distance += torch.norm(diff, p=2).item() ** 2
-            distance = math.sqrt(distance)
+            distance = math.sqrt(sum(
+                (torch.norm(local_model[layer] - model_params[layer], p=2).item() ** 2)
+                for layer in local_model
+            ))
+
+            logging.debug(
+                f"[{self.__class__.__name__}] Node={node_addr} dist={distance:.4f}, thr={threshold:.4f}"
+            )
 
             if distance <= threshold:
                 filtered_models[node_addr] = (model_params, weight)
-                logging.debug(f"[{self.__class__.__name__}] Model {node_addr} accepted (dist={distance:.4f} ≤ thr={threshold:.4f})")
+                logging.debug(f"[{self.__class__.__name__}] accepted {node_addr}")
             else:
-                logging.debug(f"[{self.__class__.__name__}] Model {node_addr} rejected (dist={distance:.4f} > thr={threshold:.4f})")
+                logging.debug(f"[{self.__class__.__name__}] rejected {node_addr}")
 
         return filtered_models
-
     def run_aggregation(self, models):
         """
         FedProx-enhanced Balance aggregation:

@@ -7,7 +7,9 @@ import torch
 from nebula.core.aggregation.aggregator import Aggregator
 
 
-class BalanceFedProxPlus(Aggregator):
+# New Improve
+# Integrated with FedAvg weights.
+class BalanceFedProxPlusImproveV11(Aggregator):
     def __init__(self, config=None, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -15,7 +17,7 @@ class BalanceFedProxPlus(Aggregator):
         self.A = 1.5  # filtering constant
         self.K = 1.0  # decay factor
         self.a = 0.5  # weight mix
-        self.mu = 0.1  # FedProx regularization
+        self.mu = 0.3  # FedProx regularization
         self.ema_beta = 0.6  # EMA smoothing for prox_center
         self.norm_clip_ratio = 3.0  # reject if ||wj|| > ratio * ||r_i||
         self.soft_k = 2.5  # softness factor for Gaussian decay
@@ -127,7 +129,9 @@ class BalanceFedProxPlus(Aggregator):
 
         local_model, _ = self.get_local_model(models)
         filtered_models = self.remove_malicious_models(models)
-        prox_center = self.compute_prox_center({**filtered_models, self._addr: (local_model, 0)})
+        prox_center = self.compute_prox_center(
+            {**filtered_models, self._addr: (local_model, 0)}
+        )
 
         if not filtered_models:
             logging.debug(
@@ -136,17 +140,22 @@ class BalanceFedProxPlus(Aggregator):
             return local_model
 
         # Soft-weights normalization
-        node_items = list(filtered_models.values())
-        weights = [w for _, w in node_items]
-        W = sum(weights)
+        nw = {}
+        for addr in filtered_models:
+            _, soft_w = filtered_models[addr]
+            _, w = models[addr]
+            nw[addr] = soft_w * w
+        W = sum(nw.values())
 
         accum = {layer: torch.zeros_like(param) for layer, param in local_model.items()}
 
         with torch.no_grad():
             # Weighted average
-            for params, soft_w in node_items:
+            for addr in filtered_models:
+                params, _ = filtered_models[addr]
+                w = nw[addr] / W
                 for layer in accum:
-                    accum[layer] += params[layer] * (soft_w / W)
+                    accum[layer] += params[layer] * w
 
             # Combine
             for layer in accum:
@@ -162,4 +171,5 @@ class BalanceFedProxPlus(Aggregator):
         logging.info(
             f"[{self.__class__.__name__}] BalanceFedProx (EMA + Soft Filter) aggregation completed."
         )
+        self._ema_prox_center = accum
         return accum

@@ -292,7 +292,7 @@ class FedAWADFL(Aggregator):
 
 
         local_model = self.get_local_model(models)
-        alpha = 0.2
+        alpha = 0.5
         for layer in accum:
             accum[layer].mul_(1-alpha)
             accum[layer].add_(local_model[layer], alpha=(alpha))

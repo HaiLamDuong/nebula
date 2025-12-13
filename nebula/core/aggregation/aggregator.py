@@ -183,6 +183,19 @@ def create_aggregator(config, engine) -> Aggregator:
     from nebula.core.aggregation.balanceFedProxFODACPlus import BalanceFedProxFODACPlus
     from nebula.core.aggregation.balanceFedProx import BalanceFedProx
     from nebula.core.aggregation.balanceFedProxPlus import BalanceFedProxPlus
+    from nebula.core.aggregation.balanceFedProxPlus1 import BalanceFedProxPlus1
+    from nebula.core.aggregation.balanceFedProxPlus11 import BalanceFedProxPlus11
+    from nebula.core.aggregation.balanceFedProxPlus111 import BalanceFedProxPlus111
+    from nebula.core.aggregation.balanceFedProxPlus2 import BalanceFedProxPlus2
+    from nebula.core.aggregation.balanceFedProxPlus22 import BalanceFedProxPlus22
+    from nebula.core.aggregation.balanceFedProxPlus222 import BalanceFedProxPlus222
+    from nebula.core.aggregation.balanceFedProxPlus3 import BalanceFedProxPlus3
+    from nebula.core.aggregation.balanceFedProxPlus4 import BalanceFedProxPlus4
+    from nebula.core.aggregation.balanceFedProxPlus5 import BalanceFedProxPlus5
+    from nebula.core.aggregation.balanceFedProxPlusImproveV1 import BalanceFedProxPlusImproveV1
+    from nebula.core.aggregation.balanceFedProxPlusImproveV11 import BalanceFedProxPlusImproveV11
+    from nebula.core.aggregation.balanceFedProxPlusImproveV2 import BalanceFedProxPlusImproveV2
+    from nebula.core.aggregation.balanceFedProxPlusImproveV21 import BalanceFedProxPlusImproveV21
     from nebula.core.aggregation.balanceAdp import BalanceAdp
     from nebula.core.aggregation.balanceAWA import BalanceAWA
     from nebula.core.aggregation.balanceAWAPlus import BalanceAWAPlus
@@ -200,6 +213,19 @@ def create_aggregator(config, engine) -> Aggregator:
         "BalanceFedProxFODACPlus": BalanceFedProxFODACPlus,
         "BalanceFedProx": BalanceFedProx,
         "BalanceFedProxPlus": BalanceFedProxPlus,
+        "BalanceFedProxPlus1": BalanceFedProxPlus1,
+        "BalanceFedProxPlus11": BalanceFedProxPlus11,
+        "BalanceFedProxPlus111": BalanceFedProxPlus111,
+        "BalanceFedProxPlus2": BalanceFedProxPlus2,
+        "BalanceFedProxPlus22": BalanceFedProxPlus22,
+        "BalanceFedProxPlus222": BalanceFedProxPlus222,
+        "BalanceFedProxPlus3": BalanceFedProxPlus3,
+        "BalanceFedProxPlus4": BalanceFedProxPlus4,
+        "BalanceFedProxPlus5": BalanceFedProxPlus5,
+        "BalanceFedProxPlusImproveV1": BalanceFedProxPlusImproveV1,
+        "BalanceFedProxPlusImproveV11": BalanceFedProxPlusImproveV11,
+        "BalanceFedProxPlusImproveV2": BalanceFedProxPlusImproveV2,
+        "BalanceFedProxPlusImproveV21": BalanceFedProxPlusImproveV21,
         "BalanceAdp": BalanceAdp,
         "BalanceAWA": BalanceAWA,
         "BalanceAWAPlus": BalanceAWAPlus,

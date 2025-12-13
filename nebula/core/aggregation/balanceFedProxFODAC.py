@@ -13,7 +13,7 @@ class BalanceFedProxFODAC(Aggregator):
         super().__init__(config, **kwargs)
 
         # Hyperparameters
-        self.A = float(kwargs.get("A", 1.5))       # balance filtering constant
+        self.A = float(kwargs.get("A", 2.0))       # balance filtering constant
         self.K = float(kwargs.get("K", 1.0))       # decay factor
         self.a = float(kwargs.get("a", 0.4))      # weight giữa local và neighbor
         self.mu = float(kwargs.get("mu", 0.1))    # FedProx regularization
