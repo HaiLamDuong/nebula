@@ -11,9 +11,9 @@ class Balance(Aggregator):
     def __init__(self, config=None, **kwargs):
         super().__init__(config, **kwargs)
         # Constant for Balance algorithm
-        self.A = 2
+        self.A = 1.5
         self.K = 1
-        self.a = 0.4
+        self.a = 0.5
         logging.info(f"[{self.__class__.__name__}] Initializing BALANCE with A={self.A}, K={self.K}, a={self.a}")
 
     def get_local_model(self, models):
