@@ -7,7 +7,7 @@ import torch
 from nebula.core.aggregation.aggregator import Aggregator
 
 
-class BalanceFedProxPlus(Aggregator):
+class BalanceFedProxPlus3(Aggregator):
     def __init__(self, config=None, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -15,7 +15,7 @@ class BalanceFedProxPlus(Aggregator):
         self.A = 1.5  # filtering constant
         self.K = 1.0  # decay factor
         self.a = 0.5  # weight mix
-        self.mu = 0.1  # FedProx regularization
+        self.mu = 0.3  # FedProx regularization
         self.ema_beta = 0.6  # EMA smoothing for prox_center
         self.norm_clip_ratio = 3.0  # reject if ||wj|| > ratio * ||r_i||
         self.soft_k = 2.5  # softness factor for Gaussian decay
@@ -34,6 +34,16 @@ class BalanceFedProxPlus(Aggregator):
             )
         return models[self._addr]
 
+    def _compute_norm(self, model_params):
+        """Compute L2 norm of model parameters efficiently."""
+        # Keep computation in tensor space to avoid CPU-GPU syncs per layer
+        return torch.sqrt(sum(torch.sum(p**2) for p in model_params.values()))
+
+    def _compute_dist(self, model1, model2):
+        """Compute Euclidean distance between two models efficiently."""
+        # Keep computation in tensor space
+        return torch.sqrt(sum(torch.sum((model1[l] - model2[l]) ** 2) for l in model1))
+
     # --------------------------------------------------------------
     # 1) Compute neighbor average → apply EMA smoothing
     # --------------------------------------------------------------
@@ -50,23 +60,31 @@ class BalanceFedProxPlus(Aggregator):
             return self.get_local_model(models)[0]
 
         with torch.no_grad():
-            raw_center = {}
             num_neighbors = len(neighbor_models)
 
-            for layer in neighbor_models[0]:
-                raw_center[layer] = torch.zeros_like(neighbor_models[0][layer])
-                for m in neighbor_models:
-                    raw_center[layer] += m[layer] / num_neighbors
+            # Initialize with the first neighbor's parameters
+            raw_center = {k: v.clone() for k, v in neighbor_models[0].items()}
+
+            # Sum remaining neighbors
+            for i in range(1, num_neighbors):
+                for layer, param in neighbor_models[i].items():
+                    raw_center[layer] += param
+
+            # Divide by N once at the end
+            for layer in raw_center:
+                raw_center[layer] /= num_neighbors
 
             # Apply EMA smoothing
             if self._ema_prox_center is None:
                 self._ema_prox_center = {k: v.clone() for k, v in raw_center.items()}
             else:
                 for layer in raw_center:
-                    self._ema_prox_center[layer] = (
-                        self.ema_beta * self._ema_prox_center[layer]
-                        + (1 - self.ema_beta) * raw_center[layer]
+                    self._ema_prox_center[layer].lerp_(
+                        raw_center[layer], 1 - self.ema_beta
                     )
+                    # lerp_(end, weight) -> start + weight * (end - start)
+                    # We want: beta * old + (1-beta) * new
+                    # = old + (1-beta) * (new - old) -> lerp_(new, 1-beta) matches exactly
 
             return self._ema_prox_center
 
@@ -79,9 +97,9 @@ class BalanceFedProxPlus(Aggregator):
 
         local_model, _ = self.get_local_model(models)
 
-        wi_norm = math.sqrt(
-            sum(torch.norm(p).item() ** 2 for p in local_model.values())
-        )
+        # Compute local model norm once, keep as scalar for threshold calc
+        wi_norm_tensor = self._compute_norm(local_model)
+        wi_norm = wi_norm_tensor.item()
 
         threshold = self.A * math.exp(-self.K * current_round / total_rounds) * wi_norm
 
@@ -91,16 +109,14 @@ class BalanceFedProxPlus(Aggregator):
             if node_addr == self._addr:
                 continue
 
-            distance = math.sqrt(
-                sum(
-                    torch.norm(model_params[layer] - local_model[layer]).item() ** 2
-                    for layer in local_model
-                )
-            )
+            # Compute distance and norm efficiently
+            distance_tensor = self._compute_dist(model_params, local_model)
+            wj_norm_tensor = self._compute_norm(model_params)
 
-            wj_norm = math.sqrt(
-                sum(torch.norm(v).item() ** 2 for v in model_params.values())
-            )
+            # Sync to CPU only once per model
+            distance = distance_tensor.item()
+            wj_norm = wj_norm_tensor.item()
+
             norm_ratio = wj_norm / (wi_norm + 1e-9)
 
             if norm_ratio > self.norm_clip_ratio:
@@ -127,7 +143,9 @@ class BalanceFedProxPlus(Aggregator):
 
         local_model, _ = self.get_local_model(models)
         filtered_models = self.remove_malicious_models(models)
-        prox_center = self.compute_prox_center({**filtered_models, self._addr: (local_model, 0)})
+        prox_center = self.compute_prox_center(
+            {self._addr: (local_model, 0), **filtered_models}
+        )
 
         if not filtered_models:
             logging.debug(
@@ -140,21 +158,34 @@ class BalanceFedProxPlus(Aggregator):
         weights = [w for _, w in node_items]
         W = sum(weights)
 
+        # Initialize accumulator
         accum = {layer: torch.zeros_like(param) for layer, param in local_model.items()}
 
         with torch.no_grad():
             # Weighted average
-            for params, soft_w in node_items:
+            # Optimize: if only one model, skip loop overhead
+            if len(node_items) == 1:
+                params, soft_w = node_items[0]
+                ratio = soft_w / W  # Should be 1.0 but keep for safety
                 for layer in accum:
-                    accum[layer] += params[layer] * (soft_w / W)
+                    accum[layer].copy_(params[layer] * ratio)
+            else:
+                for params, soft_w in node_items:
+                    ratio = soft_w / W
+                    for layer in accum:
+                        accum[layer].add_(params[layer], alpha=ratio)
 
-            # Combine
+            # Combine: accum = a * local + (1-a) * accum - mu * (local - prox)
+            # Rearranged: accum = local * (a - mu) + accum * (1-a) + prox * mu
+            c1 = self.a - self.mu
+            c2 = 1.0 - self.a
+            c3 = self.mu
+
             for layer in accum:
-                prox_term = self.mu * (local_model[layer] - prox_center[layer])
-                accum[layer] = (
-                    self.a * local_model[layer]
-                    + (1 - self.a) * accum[layer]
-                    - prox_term
+                # accum[layer] = c1 * local + c2 * accum + c3 * prox
+                # Use in-place operations for efficiency
+                accum[layer].mul_(c2).add_(local_model[layer], alpha=c1).add_(
+                    prox_center[layer], alpha=c3
                 )
 
         del models, filtered_models

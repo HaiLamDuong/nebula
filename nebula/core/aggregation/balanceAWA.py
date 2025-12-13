@@ -78,6 +78,9 @@ class BalanceAWA(Aggregator):
         distance = 0.0
         for layer in model1:
             diff = model1[layer] - model2[layer]
+            # Ensure diff is float
+            if not diff.is_floating_point():
+                diff = diff.float()
             distance += torch.norm(diff, p=2).item() ** 2
         return math.sqrt(distance)
 

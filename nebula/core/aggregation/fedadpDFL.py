@@ -208,7 +208,7 @@ class FedAdpDFL(Aggregator):
                 for layer in accum:
                     accum[layer].add_(model_parameters[layer].to(accum[layer].dtype), alpha=w)
 
-        alpha = 0.2
+        alpha = 0.5
         for layer in accum:
             accum[layer].mul_(1-alpha)
             accum[layer].add_(local_model[layer], alpha=(alpha))
