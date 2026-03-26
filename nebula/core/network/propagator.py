@@ -155,11 +155,20 @@ class StableModelPropagation(PropagationStrategy):
         Prepare the current model parameters and their corresponding weight.
 
         Args:
-            node (str): The identifier of the target node (not used in payload).
+            node (str): The identifier of the target node.
 
         Returns:
             tuple[Any, float]: The model parameters and model weight for propagation.
         """
+        if hasattr(self.engine.aggregator, "d2b_node") and node is not None:
+            current_loss = self.trainer.get_current_loss()
+            noisy_model = self.engine.aggregator.d2b_node.outbound_dispatch(
+                W_safe_dict=self.trainer.get_model_parameters(),
+                current_loss=current_loss,
+                neighbor_j=node
+            )
+            return noisy_model, self.trainer.get_model_weight()
+
         return self.trainer.get_model_parameters(), self.trainer.get_model_weight()
 
 
@@ -308,7 +317,7 @@ class Propagator:
             bool: True if propagation occurred (payload sent), False if halted early.
         """
         eligible_neighbors, strategy_id = await mpe.get_event_data()
-        
+
         self.reset_status_history()
         if strategy_id not in self.strategies:
             logging.info(f"Strategy {strategy_id} not found.")
@@ -334,24 +343,25 @@ class Propagator:
             logging.info("Exiting propagation due to repeated statuses.")
             return False
 
-        model_params, weight = strategy.prepare_model_payload(None)
-        if model_params:
-            serialized_model = (
-                model_params if isinstance(model_params, bytes) else self.trainer.serialize_model(model_params)
-            )
-        else:
-            serialized_model = None
-
         current_round = await self.get_round()
         round_number = -1 if strategy_id == "initialization" else current_round
-        parameters = serialized_model
-        message = self.cm.create_message("model", "", round_number, parameters, weight)
+
         for neighbor_addr in eligible_neighbors:
+            model_params, weight = strategy.prepare_model_payload(neighbor_addr)
+            if model_params:
+                serialized_model = (
+                    model_params if isinstance(model_params, bytes) else self.trainer.serialize_model(model_params)
+                )
+            else:
+                serialized_model = None
+
+            parameters = serialized_model
+            message = self.cm.create_message("model", "", round_number, parameters, weight)
+            size_mb = sys.getsizeof(serialized_model) / (1024** 2) if serialized_model is not None else 0
             logging.info(
-                f"Sending model to {neighbor_addr} with round {await self.get_round()}: weight={weight} | size={sys.getsizeof(serialized_model) / (1024** 2) if serialized_model is not None else 0} MB"
+                f"Sending model to {neighbor_addr} with round {await self.get_round()}: weight={weight} | size={size_mb} MB"
             )
             asyncio.create_task(self.cm.send_message(neighbor_addr, message, "model"))
-            # asyncio.create_task(self.cm.send_model(neighbor_addr, round_number, serialized_model, weight))
 
         await asyncio.sleep(self.interval)
         return True
