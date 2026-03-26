@@ -202,6 +202,7 @@ def create_aggregator(config, engine) -> Aggregator:
     from nebula.core.aggregation.balanceAWAPlus import BalanceAWAPlus
     from nebula.core.aggregation.balance import Balance
     from nebula.core.aggregation.fedadpDFL import FedAdpDFL
+    from nebula.core.aggregation.d2b_aggregator import D2BAggregator
 
     ALGORITHM_MAP = {
         "FedAvg": FedAvg,
@@ -233,6 +234,7 @@ def create_aggregator(config, engine) -> Aggregator:
         "BalanceAWAPlus": BalanceAWAPlus,
         "Balance": Balance,
         "FedAdpDFL": FedAdpDFL,
+        "D2BDpfl": D2BAggregator,
     }
     algorithm = config.participant["aggregator_args"]["algorithm"]
     aggregator = ALGORITHM_MAP.get(algorithm)
