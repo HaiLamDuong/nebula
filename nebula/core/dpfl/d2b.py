@@ -83,6 +83,8 @@ class SelfAdaptiveD2BNode:
             logging.warning("No models received for inbound evaluation.")
             return {}
 
+        logging.info(f"[D2B] inbound_evaluate: Received {(len(received_models))} models for evaluation.")
+
         flat_models = {j: self._flatten_model(m) for j, m in received_models.items()}
         reference_dict = list(received_models.values())[0] # To unflatten later
 
@@ -160,7 +162,9 @@ class SelfAdaptiveD2BNode:
 
             updated_trusts[j] = new_trust
             total_trust += new_trust
+            logging.debug(f"[D2B] Neighbor {j}: Z-Score={Z_j:.6f}, Trust Update: {prev_trust:.4f} -> {new_trust:.4f}")
 
+        logging.info(f"[D2B] inbound_evaluate: Dynamic Threshold Z_thresh={Z_thresh:.6f}, Total Trust={total_trust:.4f}")
         # 5. Aggregation
         W_agg = torch.zeros_like(list(flat_models.values())[0])
         if total_trust > 0:
@@ -217,6 +221,8 @@ class SelfAdaptiveD2BNode:
         self.W_prev2 = self.W_prev.clone() if self.W_prev is not None else None
         self.W_prev = W_safe.clone()
 
+        logging.info(f"[D2B] local_process: Loss={current_loss:.6f}, Delta W norm={norm_delta_W:.6f}, Clip_t={self.Clip_t:.6f}, Clip Ratio={clip_ratio:.4f}. Window size |H|={len(self.H)}")
+
         return self._unflatten_model(W_safe, W_train_dict), current_loss
 
     def outbound_dispatch(self, W_safe_dict: dict, current_loss: float, neighbor_j: str) -> dict:
@@ -260,11 +266,17 @@ class SelfAdaptiveD2BNode:
         # Output
         W_out = W_safe + noise_bound
 
+        logging.info(f"[D2B] outbound_dispatch to {neighbor_j}: Trust={trust_j:.4f}, rho_ij={rho_ij:.6f}, eps={epsilon_ij:.6f}, std_noise={np.sqrt(sigma_ij_sq):.6f}, bound={b:.6f}")
+
         return self._unflatten_model(W_out, W_safe_dict)
 
     def post_round_update(self, current_loss: float):
         """Called at the end of the round to update budget and L_prev."""
         if self.L_prev is not None:
             if abs(current_loss - self.L_prev) <= self.tau:
+                old_rhobase = self.rho_base
                 self.rho_base = min(self.rho_base * (1 + self.beta), self.rho_max)
+                logging.info(f"[D2B] post_round_update: Budget updated from {old_rhobase:.6f} to {self.rho_base:.6f} (Loss Diff <= tau)")
+            else:
+                logging.info(f"[D2B] post_round_update: Loss diff > tau, budget unchanged {self.rho_base:.6f}")
         self.L_prev = current_loss
