@@ -170,8 +170,19 @@ class SelfAdaptiveD2BNode:
         # 4. Trust Update
         total_trust = 0.0
         updated_trusts = {}
+        rejected_neighbors = set()
         for j, S_j in S_dict.items():
             Z_j = Z_dict[j]
+
+            # REJECTION RULE:
+            # If the neighbor made bizarrely huge parameter modifications exceeding the dynamic threshold
+            # we completely reject their model for this round.
+            if Z_j > Z_thresh:
+                logging.warning(f"[D2B] Rejecting neighbor {j}: Z-Score ({Z_j:.6f}) exceeds Z_thresh ({Z_thresh:.6f})")
+                rejected_neighbors.add(j)
+                self.Trust[j] = 0.0
+                self.R_prev[j] = 0.0
+                continue
 
             # P_safe: Evaluates if neighbor j made bizarrely huge parameter modifications.
             if Z_thresh <= 0:
@@ -219,14 +230,26 @@ class SelfAdaptiveD2BNode:
         # 5. Aggregation
         # Sums all models weighted against their verified `Trust`!
         W_agg = torch.zeros_like(list(flat_models.values())[0])
+        accepted_models = {j: W_j for j, W_j in flat_models.items() if j not in rejected_neighbors}
+
         if total_trust > 0:
-            for j, W_j in flat_models.items():
+            for j, W_j in accepted_models.items():
                 norm_trust = updated_trusts[j] / total_trust
                 W_agg += W_j * norm_trust
         else:
             # Absolute fallback if all trust somehow completely bombs to absolute zero.
-            for j, W_j in flat_models.items():
-                W_agg += W_j * (1.0 / len(flat_models))
+            if len(accepted_models) > 0:
+                for j, W_j in accepted_models.items():
+                    W_agg += W_j * (1.0 / len(accepted_models))
+            else:
+                # If ALL models are rejected, we retain our own previous model (if it exists) to prevent corruption.
+                logging.error("[D2B] All neighbor models rejected! Reverting to local W_prev.")
+                if self.W_prev is not None:
+                    W_agg = self.W_prev.clone()
+                else:
+                    # In round 0 if everything is absurd, just average them anyway as a last resort.
+                    for j, W_j in flat_models.items():
+                        W_agg += W_j * (1.0 / len(flat_models))
 
         # Unflatten the calculated global model back to a normal state parameter dictionary
         return self._unflatten_model(W_agg, reference_dict)
